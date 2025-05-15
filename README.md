@@ -1,2 +1,2 @@
 # Injector
-A very simple CLI dll injector
+A very simple DLL injector with GUI
