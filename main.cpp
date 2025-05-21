@@ -1,3 +1,15 @@
+//
+//
+//
+//               BEFORE YOU CRY
+// 
+//     I WILL DOCUMENT THIS IN THE FUTURE!!!
+//
+//
+//
+//
+//
+//
 #include <windows.h>
 #include <tlhelp32.h>
 #include <iostream>
@@ -8,18 +20,161 @@
 #include <tuple>
 #include <thread>
 #include <commdlg.h>
+#include <filesystem>
+#include <fstream>
+#include <lmcons.h>
 
 #define SELECT_DLL_BUTTON 1
 #define INJECT_BUTTON 2
 
+static wchar_t appDataPath[MAX_PATH + 1];
 HWND p_hwnd;
 std::map<int, std::tuple<const char*, int>> processes;
-static wchar_t selectedFilePath[MAX_PATH] = { 0 };
+static wchar_t selectedFilePath[MAX_PATH + 1] = { 0 };
+static wchar_t selectedProcess[MAX_PATH + 1] = { 0 };
+static wchar_t* dllFileName = new wchar_t[MAX_PATH + 1];
 HWND pathEdit;
 WNDPROC originalEditProc = nullptr;
 HHOOK g_hHook = NULL;
 bool consoleSwitch = false;
 HWND hComboBox = nullptr;
+
+wchar_t* GetUSN_W() {
+    wchar_t* buffer = new wchar_t[UNLEN + 1];
+    DWORD size = UNLEN + 1;
+    if (GetUserNameW(buffer, &size)) {
+        return buffer;
+    } 
+    else {
+        delete[] buffer;
+        return nullptr;
+    }
+}
+
+int WriteConfig(wchar_t* absPath) {
+    if (wcslen(absPath) < 1 || wcslen(selectedFilePath) < 1) {
+        return 1;
+    }
+
+    wchar_t* folderPath = new wchar_t[wcslen(absPath) + 1];
+    wcscpy_s(folderPath, wcslen(absPath) + 1, absPath);
+    wchar_t* lastSlash = wcsrchr(folderPath, L'\\');
+    if (lastSlash != nullptr) {
+        *lastSlash = L'\0';
+    }
+
+    if (!std::filesystem::exists(folderPath)) {
+        std::filesystem::create_directories(folderPath);
+    }
+    delete[] folderPath;
+
+    size_t len = wcslen(selectedProcess);
+    for (size_t i = 0; i < len; i++) {
+        if (iswspace(selectedProcess[i])) {
+            selectedProcess[i] = L'\0';
+        }
+    }
+
+    char utf8Proc[MAX_PATH + 1] = { 0 };
+    char utf8Dll[MAX_PATH + 1] = { 0 };
+    wcstombs_s(nullptr, utf8Proc, selectedProcess, MAX_PATH);
+    wcstombs_s(nullptr, utf8Dll, selectedFilePath, MAX_PATH);
+
+    std::ofstream f(absPath, std::ios::trunc);
+    if (!f.is_open()) {
+        return 2;
+    }
+
+    f << "{\n";
+    f << "\t\"lastProcessName\": \"" << utf8Proc << "\",\n";
+    f << "\t\"lastDLLPath\": \"" << utf8Dll << "\"\n";
+    f << "}";
+    f.close();
+
+    return 0;
+}
+
+
+//i know this is a cancer
+std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
+    wchar_t* folderPath = new wchar_t[wcslen(absPath) + 1];
+    wcscpy_s(folderPath, wcslen(absPath) + 1, absPath);
+    wchar_t* lastSlash = wcsrchr(folderPath, L'\\');
+    if (lastSlash != nullptr) {
+        *lastSlash = L'\0';
+    }
+    std::wcout << folderPath << std::endl;
+    std::wcout << absPath << std::endl;
+
+    if (!std::filesystem::exists(folderPath)) {
+        std::filesystem::create_directories(folderPath);
+    }
+
+    delete[] folderPath;
+
+    if (!std::filesystem::exists(absPath)) {
+        std::ofstream f(absPath);
+        f << "{\n\t\"lastProcessName\": \"\",\n\t\"lastDLLPath\": \"\"\n}";
+    }
+
+    if (std::filesystem::exists(absPath)) {
+        std::tuple<wchar_t*, wchar_t*> data;
+        std::ifstream f(absPath);
+        std::string s_output;
+        wchar_t* procName = new wchar_t[MAX_PATH + 1];
+        memset(procName, 0, (MAX_PATH + 1) * sizeof(wchar_t));
+
+        wchar_t* dllPath = new wchar_t[MAX_PATH + 1];
+        memset(dllPath, 0, (MAX_PATH + 1) * sizeof(wchar_t));
+
+        if (f.is_open()) {
+            std::string tempOut;
+            while (std::getline(f, tempOut)) {
+                size_t len = tempOut.length() + 1;
+                wchar_t* w_output = new wchar_t[len];
+
+                size_t converted = 0;
+                mbstowcs_s(&converted, w_output, len, tempOut.c_str(), _TRUNCATE);
+                const wchar_t* lpn = wcsstr(w_output, L"lastProcessName");
+                if (lpn) {
+                    const wchar_t* colon = wcschr(lpn, L':');
+                    if (colon) {
+                        bool start = false;
+                        size_t counter = 0;
+                        for (size_t i = 0; i < wcslen(colon); i++) {
+                            if (start && colon[i] == L'"') break;
+                            if (!start && colon[i] == L'"') start = true;
+                            if (start && colon[i] != L'"') {
+                                procName[counter++] = colon[i];
+                            }
+                        }
+                        procName[counter] = L'\0';
+
+                    }
+                    std::cout << std::endl;
+                }
+                const wchar_t* ldp = wcsstr(w_output, L"lastDLLPath");
+                if (ldp) {
+                    const wchar_t* colon = wcschr(ldp, L':');
+                    if (colon) {
+                        bool start = false;
+                        size_t counter = 0;
+                        for (size_t i = 0; i < wcslen(colon); i++) {
+                            if (start && colon[i] == L'"') break;
+                            if (!start && colon[i] == L'"') start = true;
+                            if (start && colon[i] != L'"') {
+                                dllPath[counter++] = colon[i];
+                            }
+                        }
+                        dllPath[counter] = L'\0';
+                    }
+                }
+                delete[] w_output;
+            }
+        }
+        return std::make_tuple(procName, dllPath);
+    }
+}
 
 void CreateConsole() {
     AllocConsole();
@@ -42,7 +197,7 @@ LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam) {
             consoleSwitch = !consoleSwitch;
         }
     }
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
+    return CallNextHookEx(g_hHook, nCode, wParam, lParam);
 }
 
 DWORD FetchProcesses() {
@@ -64,7 +219,7 @@ DWORD FetchProcesses() {
             wcstombs_s(&convChars, procName, len, w_fname, _TRUNCATE);
             
             std::cout << procName << " - " << procId << std::endl;
-
+            
             processes[processes.size()] = std::make_tuple(static_cast<const char*>(procName), procId);
         } while (Process32Next(snapshot, &processEntry));
     }
@@ -202,6 +357,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (GetOpenFileName(&ofn) == TRUE) {
                 std::wcout << selectedFilePath << std::endl;
 
+                WriteConfig(appDataPath);
+
                 wchar_t basename[260] = {0};
                 size_t pathLen = wcslen(selectedFilePath);
 
@@ -223,6 +380,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 wchar_t processData[260];
                 SendMessage(hComboBox, CB_GETLBTEXT, index, (LPARAM)processData);
                 std::wcout << processData << std::endl;
+                wchar_t* procDataCopy = new wchar_t[MAX_PATH + 1];
+                wcscpy_s(procDataCopy, MAX_PATH + 1, processData);
+                wchar_t* paren = wcsrchr(procDataCopy, L'(');
+                if (paren != nullptr) {
+                    *paren = L'\0';
+                }
+                wcscpy_s(selectedProcess, MAX_PATH + 1, procDataCopy);
+
+                WriteConfig(appDataPath);
 
                 const wchar_t* openParen = wcsrchr(processData, L'(');
                 if (openParen) {
@@ -259,17 +425,73 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wc.lpszClassName = L"InjectorWindowClass";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+
     RegisterClass(&wc);
     CreateConsole();
     FetchProcesses();
     ShowWindow(GetConsoleWindow(), SW_HIDE);
+
+    memset(dllFileName, 0, (MAX_PATH + 1) * sizeof(wchar_t));
+
+    wchar_t username[UNLEN + 1];
+    wcscpy_s(username, UNLEN + 1, GetUSN_W());
+    std::wcout << username << std::endl;
+    const wchar_t* prePath = L"C:\\Users\\";
+    const wchar_t* trailPath = L"\\AppData\\Roaming\\Injector\\config.json";
+    wcscpy_s(appDataPath, MAX_PATH + 1, prePath);
+    wcscat_s(appDataPath, MAX_PATH + 1, username);
+    wcscat_s(appDataPath, MAX_PATH + 1, trailPath);
+
+    std::tuple<wchar_t*, wchar_t*> configData = ReadConfig(appDataPath);
+    wchar_t* w_procName = std::get<0>(configData);
+    wchar_t* w_dllPath = std::get<1>(configData);
+
+    std::wcout << "procname: " << w_procName << std::endl;
+    std::wcout << "dllpath: " << w_dllPath << std::endl;
+
     g_hHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, NULL, 0);
     if (!g_hHook) MessageBox(NULL, L"Failed to install keyboard hook!\nBinds wont work", L"Error", MB_ICONERROR);
+
     HWND hwnd = CreateWindowEx(0, L"InjectorWindowClass", L"Injector", WS_SYSMENU | WS_VISIBLE, GetSystemMetrics(SM_CXSCREEN) / 2, GetSystemMetrics(SM_CYSCREEN) / 2, 300, 400, nullptr, nullptr, hInstance, nullptr);
     if (!hwnd) { MessageBox(NULL, L"Failed to create window!\nSomething may be blocking it!", L"Error", MB_ICONERROR);  return 1; }
     ShowWindow(hwnd, nCmdShow);
-    
+
     p_hwnd = hwnd;
+
+    if (wcslen(w_dllPath) > 1 && std::filesystem::exists(w_dllPath)) {
+        std::cout << "valid dllpath" << std::endl;
+        wchar_t* lastSlash = wcsrchr(w_dllPath, L'\\');
+        if (lastSlash) {
+            wcscpy_s(dllFileName, MAX_PATH + 1, lastSlash + 1);
+            std::wcout << "lastFileName: " << dllFileName << std::endl;
+            wcscpy_s(selectedFilePath, MAX_PATH + 1, w_dllPath);
+            SetWindowTextW(pathEdit, dllFileName);
+        }
+    }
+
+    if (wcslen(w_procName) > 1) {
+        int count = (int)SendMessage(hComboBox, CB_GETCOUNT, 0, 0);
+        for (int i = 0; i < count; i++) {
+            wchar_t itemTextBuffer[MAX_PATH];
+            SendMessage(hComboBox, CB_GETLBTEXT, i, (LPARAM)itemTextBuffer);
+            bool mismatchFound = false;
+            for (size_t i = 0; i < wcslen(w_procName); i++) {
+                if (w_procName[i] != itemTextBuffer[i]) {
+                    mismatchFound = true;
+                    break;
+                }
+            }
+
+            if (!mismatchFound) {
+                std::wcout << "Found " << itemTextBuffer << " as matching with " << w_procName << std::endl;
+                SendMessage(hComboBox, CB_SETCURSEL, i, 0);
+                break;
+            }
+        }
+    }
+
+    delete[] w_procName;
+    delete[] w_dllPath;
 
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {
