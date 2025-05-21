@@ -1,9 +1,9 @@
 ﻿  main.cpp
-C:\Users\Norbi\Desktop\cpp\injector\main.cpp(68,37): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\Norbi\Desktop\cpp\injector\main.cpp(221,23): warning C4244: 'initializing': conversion from 'LRESULT' to 'int', possible loss of data
+C:\Users\Norbi\Desktop\cpp\injector\main.cpp(223,37): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\Norbi\Desktop\cpp\injector\main.cpp(378,23): warning C4244: 'initializing': conversion from 'LRESULT' to 'int', possible loss of data
   Generating code
-  2 of 218 functions ( 0.9%) were compiled, the rest were copied from previous compilation.
+  4 of 541 functions ( 0.7%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    0 functions had inline decision re-evaluated but remain unchanged
+    3 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   injector.vcxproj -> C:\Users\Norbi\Desktop\cpp\injector\x64\Release\injector.exe
