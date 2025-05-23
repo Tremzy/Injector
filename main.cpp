@@ -32,24 +32,15 @@ HWND p_hwnd;
 std::map<int, std::tuple<const char*, int>> processes;
 static wchar_t selectedFilePath[MAX_PATH + 1] = { 0 };
 static wchar_t selectedProcess[MAX_PATH + 1] = { 0 };
-static wchar_t* dllFileName = new wchar_t[MAX_PATH + 1];
+static wchar_t dllFileName[MAX_PATH + 1] = {};
+HFONT hfont = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
+HFONT b_hfont = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
+
 HWND pathEdit;
 WNDPROC originalEditProc = nullptr;
 HHOOK g_hHook = NULL;
 bool consoleSwitch = false;
 HWND hComboBox = nullptr;
-
-wchar_t* GetUSN_W() {
-    wchar_t* buffer = new wchar_t[UNLEN + 1];
-    DWORD size = UNLEN + 1;
-    if (GetUserNameW(buffer, &size)) {
-        return buffer;
-    } 
-    else {
-        delete[] buffer;
-        return nullptr;
-    }
-}
 
 int WriteConfig(wchar_t* absPath) {
     if (wcslen(absPath) < 1 || wcslen(selectedFilePath) < 1) {
@@ -95,8 +86,7 @@ int WriteConfig(wchar_t* absPath) {
 }
 
 
-//i know this is a cancer
-std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
+void ReadConfig(wchar_t* absPath, wchar_t* procName, wchar_t* dllPath, size_t pNLength, size_t dPLength) {
     wchar_t* folderPath = new wchar_t[wcslen(absPath) + 1];
     wcscpy_s(folderPath, wcslen(absPath) + 1, absPath);
     wchar_t* lastSlash = wcsrchr(folderPath, L'\\');
@@ -121,11 +111,8 @@ std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
         std::tuple<wchar_t*, wchar_t*> data;
         std::ifstream f(absPath);
         std::string s_output;
-        wchar_t* procName = new wchar_t[MAX_PATH + 1];
-        memset(procName, 0, (MAX_PATH + 1) * sizeof(wchar_t));
-
-        wchar_t* dllPath = new wchar_t[MAX_PATH + 1];
-        memset(dllPath, 0, (MAX_PATH + 1) * sizeof(wchar_t));
+        memset(procName, 0, pNLength * sizeof(wchar_t));
+        memset(dllPath, 0, dPLength * sizeof(wchar_t));
 
         if (f.is_open()) {
             std::string tempOut;
@@ -142,6 +129,7 @@ std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
                         bool start = false;
                         size_t counter = 0;
                         for (size_t i = 0; i < wcslen(colon); i++) {
+                            if (counter > pNLength) break;
                             if (start && colon[i] == L'"') break;
                             if (!start && colon[i] == L'"') start = true;
                             if (start && colon[i] != L'"') {
@@ -160,6 +148,7 @@ std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
                         bool start = false;
                         size_t counter = 0;
                         for (size_t i = 0; i < wcslen(colon); i++) {
+                            if (counter > dPLength) break;
                             if (start && colon[i] == L'"') break;
                             if (!start && colon[i] == L'"') start = true;
                             if (start && colon[i] != L'"') {
@@ -172,7 +161,6 @@ std::tuple<wchar_t*, wchar_t*> ReadConfig(wchar_t* absPath) {
                 delete[] w_output;
             }
         }
-        return std::make_tuple(procName, dllPath);
     }
 }
 
@@ -217,6 +205,7 @@ DWORD FetchProcesses() {
             char* procName = new char[len];
             size_t convChars = 0;
             wcstombs_s(&convChars, procName, len, w_fname, _TRUNCATE);
+            
             
             std::cout << procName << " - " << procId << std::endl;
             
@@ -277,8 +266,7 @@ LRESULT CALLBACK EditBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    HFONT hfont = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Calibri");
-    HFONT b_hfont = CreateFont(22, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Calibri");
+
     switch (uMsg)
     {
     case WM_CREATE:{
@@ -380,7 +368,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 wchar_t processData[260];
                 SendMessage(hComboBox, CB_GETLBTEXT, index, (LPARAM)processData);
                 std::wcout << processData << std::endl;
-                wchar_t* procDataCopy = new wchar_t[MAX_PATH + 1];
+                wchar_t procDataCopy[MAX_PATH + 1];
                 wcscpy_s(procDataCopy, MAX_PATH + 1, processData);
                 wchar_t* paren = wcsrchr(procDataCopy, L'(');
                 if (paren != nullptr) {
@@ -434,7 +422,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     memset(dllFileName, 0, (MAX_PATH + 1) * sizeof(wchar_t));
 
     wchar_t username[UNLEN + 1];
-    wcscpy_s(username, UNLEN + 1, GetUSN_W());
+    DWORD size = UNLEN + 1;
+    GetUserNameW(username, &size);
     std::wcout << username << std::endl;
     const wchar_t* prePath = L"C:\\Users\\";
     const wchar_t* trailPath = L"\\AppData\\Roaming\\Injector\\config.json";
@@ -442,9 +431,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wcscat_s(appDataPath, MAX_PATH + 1, username);
     wcscat_s(appDataPath, MAX_PATH + 1, trailPath);
 
-    std::tuple<wchar_t*, wchar_t*> configData = ReadConfig(appDataPath);
-    wchar_t* w_procName = std::get<0>(configData);
-    wchar_t* w_dllPath = std::get<1>(configData);
+    wchar_t w_procName[MAX_PATH + 1];
+    wchar_t w_dllPath[MAX_PATH + 1];
+    ReadConfig(appDataPath, w_procName, w_dllPath, MAX_PATH + 1, MAX_PATH + 1);
 
     std::wcout << "procname: " << w_procName << std::endl;
     std::wcout << "dllpath: " << w_dllPath << std::endl;
@@ -489,9 +478,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             }
         }
     }
-
-    delete[] w_procName;
-    delete[] w_dllPath;
 
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {
