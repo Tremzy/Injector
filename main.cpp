@@ -33,8 +33,8 @@ std::map<int, std::tuple<const char*, int>> processes;
 static wchar_t selectedFilePath[MAX_PATH + 1] = { 0 };
 static wchar_t selectedProcess[MAX_PATH + 1] = { 0 };
 static wchar_t dllFileName[MAX_PATH + 1] = {};
-HFONT hfont = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
-HFONT b_hfont = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
+HFONT hfont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
+HFONT b_hfont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable");
 
 HWND pathEdit;
 WNDPROC originalEditProc = nullptr;
@@ -388,16 +388,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     size_t convChars = 0;
                     wcstombs_s(&convChars, ch_path, len, selectedFilePath, _TRUNCATE);
                     if (!InjectDLL((DWORD)procID, ch_path)) {
-                        MessageBox(hwnd, L"Failed to inject", L"Error", MB_ICONERROR);
+                        MessageBox(p_hwnd, L"Failed to inject", L"Error", MB_ICONERROR);
                     }
                     else {
-                        MessageBox(hwnd, L"Successfully injected!", L"Success", MB_OK);
+                        MessageBox(p_hwnd, L"Successfully injected!", L"Success", MB_OK);
                     }
                 }
             }
         }
         return 0;
     case WM_DESTROY: {
+        if (g_hHook) UnhookWindowsHookEx(g_hHook);
+        g_hHook = nullptr;
+        if (b_hfont) DeleteObject(b_hfont);
+        if (hfont) DeleteObject(hfont);
+        FreeConsole();
+
         PostQuitMessage(0);
         return 0;
     }
@@ -439,10 +445,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     std::wcout << "dllpath: " << w_dllPath << std::endl;
 
     g_hHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, NULL, 0);
-    if (!g_hHook) MessageBox(NULL, L"Failed to install keyboard hook!\nBinds wont work", L"Error", MB_ICONERROR);
+    if (!g_hHook) MessageBox(p_hwnd, L"Failed to install keyboard hook!\nBinds wont work", L"Error", MB_ICONERROR);
 
     HWND hwnd = CreateWindowEx(0, L"InjectorWindowClass", L"Injector", WS_SYSMENU | WS_VISIBLE, GetSystemMetrics(SM_CXSCREEN) / 2, GetSystemMetrics(SM_CYSCREEN) / 2, 300, 400, nullptr, nullptr, hInstance, nullptr);
-    if (!hwnd) { MessageBox(NULL, L"Failed to create window!\nSomething may be blocking it!", L"Error", MB_ICONERROR);  return 1; }
+    if (!hwnd) { MessageBox(p_hwnd, L"Failed to create window!\nSomething may be blocking it!", L"Error", MB_ICONERROR);  return 1; }
     ShowWindow(hwnd, nCmdShow);
 
     p_hwnd = hwnd;
@@ -460,6 +466,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     if (wcslen(w_procName) > 1) {
         int count = (int)SendMessage(hComboBox, CB_GETCOUNT, 0, 0);
+        bool foundProc = false;
         for (int i = 0; i < count; i++) {
             wchar_t itemTextBuffer[MAX_PATH];
             SendMessage(hComboBox, CB_GETLBTEXT, i, (LPARAM)itemTextBuffer);
@@ -472,11 +479,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             }
 
             if (!mismatchFound) {
+                foundProc = true;
                 std::wcout << "Found " << itemTextBuffer << " as matching with " << w_procName << std::endl;
                 SendMessage(hComboBox, CB_SETCURSEL, i, 0);
                 break;
             }
         }
+        if (!foundProc) MessageBox(p_hwnd, L"Couldnt find previously used application in current process list. You may reselect it after you've opened it.", L"Process not found", MB_ICONINFORMATION);
     }
 
     MSG msg = {};
