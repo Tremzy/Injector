@@ -494,6 +494,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         if (!foundProc) MessageBox(p_hwnd, L"Couldnt find previously used application in current process list. You may reselect it after you've opened it.", L"Process not found", MB_ICONINFORMATION);
     }
 
+    for (auto& p : processes) {
+        char* procNamePtr = const_cast<char*>(std::get<0>(p.second));
+        delete[] procNamePtr;
+    }
+    processes.clear();
+
     MSG msg = {};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
