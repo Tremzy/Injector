@@ -27,9 +27,12 @@
 #define SELECT_DLL_BUTTON 1
 #define INJECT_BUTTON 2
 
+#pragma warning(disable: 28251)
+
+
 static wchar_t appDataPath[MAX_PATH + 1];
 HWND p_hwnd;
-std::map<int, std::tuple<const char*, int>> processes;
+std::map<size_t, std::tuple<const char*, int>> processes;
 static wchar_t selectedFilePath[MAX_PATH + 1] = { 0 };
 static wchar_t selectedProcess[MAX_PATH + 1] = { 0 };
 static wchar_t dllFileName[MAX_PATH + 1] = {};
@@ -193,6 +196,7 @@ DWORD FetchProcesses() {
     if (snapshot == INVALID_HANDLE_VALUE) return 0;
 
     PROCESSENTRY32 processEntry;
+    memset(&processEntry, 0, sizeof(PROCESSENTRY32));
     processEntry.dwSize = sizeof(PROCESSENTRY32);
 
     if (Process32First(snapshot, &processEntry)) {
@@ -363,9 +367,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
         }
         else if (LOWORD(wParam) == 2) {
-            int index = SendMessage(hComboBox, CB_GETCURSEL, 0, 0);
+            LRESULT index = SendMessage(hComboBox, CB_GETCURSEL, 0, 0);
             if (index != CB_ERR) {
                 wchar_t processData[260];
+                memset(processData, 0, sizeof(wchar_t) * 260);
                 SendMessage(hComboBox, CB_GETLBTEXT, index, (LPARAM)processData);
                 std::wcout << processData << std::endl;
                 wchar_t procDataCopy[MAX_PATH + 1];
@@ -469,6 +474,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         bool foundProc = false;
         for (int i = 0; i < count; i++) {
             wchar_t itemTextBuffer[MAX_PATH];
+            memset(itemTextBuffer, 0, sizeof(wchar_t) * MAX_PATH);
             SendMessage(hComboBox, CB_GETLBTEXT, i, (LPARAM)itemTextBuffer);
             bool mismatchFound = false;
             for (size_t i = 0; i < wcslen(w_procName); i++) {
