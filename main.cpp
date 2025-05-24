@@ -23,8 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <lmcons.h>
-#include "headers/config.h"
-#include "headers/winapi.h"
+#include "headers/injector.h"
 
 #define SELECT_DLL_BUTTON 1
 #define INJECT_BUTTON 2
